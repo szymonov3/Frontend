@@ -1,5 +1,5 @@
 def imageName="szymonov/frontend"
-def dockerTag="frontend"
+def dockerTag=""
 def dockerRegistry=""
 def registryCredentials="dockerhub"
 
