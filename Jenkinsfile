@@ -1,7 +1,7 @@
 def imageName="szymonov/frontend"
-def dockerTag=""
 def dockerRegistry=""
 def registryCredentials="dockerhub"
+def dockerTag=""
 
 pipeline {
     agent {
@@ -9,14 +9,14 @@ pipeline {
     }
 
     environment {
-        PIP_BREAK_SYSTEM_PACKAGES = 1
         scannerHome = tool 'SonarQube'
+        PIP_BREAK_SYSTEM_PACKAGES = 1
     }
 
     stages {
         stage('Get Code') {
             steps {
-                checkout scm
+                checkout scm // Get some code from a GitHub repository
             }
         }
 
@@ -26,7 +26,7 @@ pipeline {
                 sh "python3 -m pytest --cov=. --cov-report xml:test-results/coverage.xml --junitxml=test-results/pytest-report.xml"
             }
         }
-        
+
         stage('Sonarqube analysis') {
             steps {
                 withSonarQubeEnv('SonarQube') {
@@ -34,10 +34,11 @@ pipeline {
                 }
             }
         }
-        
+
         stage('Build application image') {
             steps {
                 script {
+                  // Prepare basic image for application
                   dockerTag = "RC-${env.BUILD_ID}.${env.GIT_COMMIT.take(7)}"
                   applicationImage = docker.build("$imageName:$dockerTag",".")
                 }
@@ -53,10 +54,24 @@ pipeline {
                     }
                 }
             }
-        } 
-    
+        }
+        stage ('Push to Repo') {
+            steps {
+                dir('ArgoCD') {
+                    withCredentials([gitUsernamePassword(credentialsId: 'git', gitToolName: 'Default')]) {
+                        git branch: 'main', url: 'https://github.com/szymonov3/ArgoCD.git'
+                        sh """ cd frontend
+                        git config --global user.email szymonov3@gmail.com
+                        git config --global user.name szymonov3
+                        sed -i "s#$imageName.*#$imageName:$dockerTag#g" deployment.yaml
+                        git commit -am "Set new $dockerTag tag."
+                        git push origin main
+                        """
+                    }
+                }
+            }
+        }
     }
-
     post {
         always {
             junit testResults: "test-results/*.xml"
